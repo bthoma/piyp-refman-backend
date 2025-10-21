@@ -12,10 +12,10 @@ import base64
 import logging
 import os
 
-from ..models.paper import PaperListResponse, PaperDetailResponse, UploadResponse, NoteCreate, NoteResponse
-from ..services.agent_client import AgentClient
-from ..services.pdf_service import PDFService
-from ..config import get_settings
+from models.paper import PaperListResponse, PaperDetailResponse, UploadResponse, NoteCreate, NoteResponse
+from services.agent_client import AgentClient
+from services.pdf_service import PDFService
+from config import get_settings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

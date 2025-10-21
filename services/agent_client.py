@@ -14,9 +14,9 @@ import os
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Import agents
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../../piyp_agents'))
-from piyp_agents import AGENT_FUNCTIONS
+# Import agents - placeholder for now
+# TODO: Integrate with actual agents when deployed
+AGENT_FUNCTIONS = {}  # Placeholder
 
 
 class AgentClient:
