@@ -29,11 +29,12 @@ from config import get_settings
 
 # Import API routers
 from api.papers import router as papers_router
-# from api.search import router as search_router
-# from api.citations import router as citations_router
-# from api.collections import router as collections_router
-# from api.tasks import router as tasks_router
-# from api.expansion import router as expansion_router
+from api.search import router as search_router
+from api.citations import router as citations_router
+from api.collections import router as collections_router
+from api.tasks import router as tasks_router
+from api.expansion import router as expansion_router
+from api.stats import router as stats_router
 
 # Import services
 from services.agent_client import AgentClient
@@ -121,11 +122,12 @@ manager = ConnectionManager()
 
 # API routers
 app.include_router(papers_router, prefix="/api/papers", tags=["papers"])
-# app.include_router(search_router, prefix="/api/search", tags=["search"])  
-# app.include_router(citations_router, prefix="/api/citations", tags=["citations"])
-# app.include_router(collections_router, prefix="/api/collections", tags=["collections"])
-# app.include_router(tasks_router, prefix="/api/tasks", tags=["tasks"])
-# app.include_router(expansion_router, prefix="/api/expansion", tags=["expansion"])
+app.include_router(search_router, prefix="/api/search", tags=["search"])  
+app.include_router(citations_router, prefix="/api/citations", tags=["citations"])
+app.include_router(collections_router, prefix="/api/collections", tags=["collections"])
+app.include_router(tasks_router, prefix="/api/tasks", tags=["tasks"])
+app.include_router(expansion_router, prefix="/api/knowledge", tags=["knowledge"])
+app.include_router(stats_router, prefix="/api/stats", tags=["stats"])
 
 # Root endpoints
 @app.get("/")
