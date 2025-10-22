@@ -311,18 +311,13 @@ class SupabaseClient:
             if not self._initialized:
                 await self.initialize()
             
+            # Use minimal data - only insert into columns that exist
             paper_data = {
                 # TODO: Add user_id when column exists in database
                 "paper_id": paper_id,
                 "title": title,
-                "authors": authors,
-                "year": metadata.get('year') if metadata else None,
-                "venue": metadata.get('venue') if metadata else None,
-                "doi": metadata.get('doi') if metadata else None,
-                "arxiv_id": metadata.get('arxiv_id') if metadata else None,
-                "abstract": metadata.get('abstract', '') if metadata else '',
-                "pdf_url": metadata.get('pdf_url') if metadata else None,
-                # Don't manually set timestamps - let the database handle it
+                # TODO: Add other fields when columns are confirmed to exist:
+                # - authors, year, venue, doi, arxiv_id, abstract, pdf_url
             }
             
             # Insert paper
