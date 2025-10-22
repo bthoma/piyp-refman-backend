@@ -86,7 +86,7 @@ class SupabaseClient:
             if not self._initialized:
                 await self.initialize()
             
-            # Build base query
+            # Build base query - start simple, add joins later
             query_builder = self._client.table('research_papers').select(
                 '''
                 paper_id,
@@ -98,17 +98,14 @@ class SupabaseClient:
                 arxiv_id,
                 citation_count,
                 created_at,
-                updated_at,
-                paper_reading_status (
-                    status,
-                    starred,
-                    rating,
-                    updated_at
-                )
+                updated_at
                 '''
             )
             
-            # Apply filters
+            # Filter by user_id (required for all queries)
+            query_builder = query_builder.eq('user_id', user_id)
+            
+            # Apply additional filters
             if filters:
                 if filters.get('author'):
                     query_builder = query_builder.ilike('authors', f"%{filters['author']}%")
@@ -125,11 +122,7 @@ class SupabaseClient:
                 if filters.get('title_contains'):
                     query_builder = query_builder.ilike('title', f"%{filters['title_contains']}%")
                 
-                if filters.get('status'):
-                    query_builder = query_builder.eq('paper_reading_status.status', filters['status'])
-                
-                if filters.get('starred') is not None:
-                    query_builder = query_builder.eq('paper_reading_status.starred', filters['starred'])
+                # TODO: Add reading status filters after implementing proper join
             
             # Apply text search if query provided
             if query:
@@ -156,10 +149,10 @@ class SupabaseClient:
             else:
                 query_builder = query_builder.order('created_at', desc=True)
             
-            # Get total count
+            # Get total count for this user
             count_result = await asyncio.get_event_loop().run_in_executor(
                 None,
-                lambda: self._client.table('research_papers').select('*', count='exact').execute()
+                lambda: self._client.table('research_papers').select('paper_id', count='exact').eq('user_id', user_id).execute()
             )
             total_count = count_result.count if count_result else 0
             
@@ -190,15 +183,7 @@ class SupabaseClient:
                         "rating": None
                     }
                     
-                    # Add reading status if available
-                    if paper_data.get('paper_reading_status'):
-                        status_data = paper_data['paper_reading_status'][0] if isinstance(paper_data['paper_reading_status'], list) else paper_data['paper_reading_status']
-                        if status_data:
-                            paper.update({
-                                "status": status_data.get('status', 'to_read'),
-                                "starred": status_data.get('starred', False),
-                                "rating": status_data.get('rating')
-                            })
+                    # TODO: Add reading status lookup in a separate query for better performance
                     
                     papers.append(paper)
             
