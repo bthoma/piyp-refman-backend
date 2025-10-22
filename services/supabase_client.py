@@ -298,6 +298,58 @@ class SupabaseClient:
             logger.error(f"Get paper details failed: {str(e)}")
             return None
     
+    async def _get_or_create_default_research_query(self, user_id: str) -> str:
+        """Get or create a default research query for uploaded papers"""
+        try:
+            # First, check if a default query already exists
+            def query_existing():
+                return self._client.table('research_queries').select('id').eq('user_id', user_id).eq('query_text', 'Uploaded Papers').execute()
+            
+            result = await asyncio.get_event_loop().run_in_executor(None, query_existing)
+            
+            if result.data:
+                return result.data['id']
+            
+        except Exception:
+            # Query doesn't exist, so create it
+            pass
+        
+        # Create default research query for uploaded papers
+        try:
+            query_data = {
+                "user_id": user_id,
+                "query_text": "Uploaded Papers",
+                "query_type": "manual_upload",
+                "status": "completed"
+            }
+            
+            def create_query():
+                return self._client.table('research_queries').insert(query_data).select('id').execute()
+            
+            result = await asyncio.get_event_loop().run_in_executor(None, create_query)
+            
+            if result.data:
+                return result.data['id']
+            else:
+                raise Exception("Failed to create default research query")
+                
+        except Exception as e:
+            logger.error(f"Failed to create default research query: {str(e)}")
+            # Fallback: try to find any existing research query for this user
+            try:
+                def find_any_query():
+                    return self._client.table('research_queries').select('id').eq('user_id', user_id).limit(1).execute()
+                
+                result = await asyncio.get_event_loop().run_in_executor(None, find_any_query)
+                
+                if result.data:
+                    return result.data['id']
+            except Exception:
+                pass
+            
+            # If all else fails, raise the original error
+            raise e
+    
     async def create_paper(
         self,
         paper_id: str,
@@ -311,14 +363,33 @@ class SupabaseClient:
             if not self._initialized:
                 await self.initialize()
             
-            # Use minimal data - only insert into columns that exist
+            # Get or create a default research query for uploaded papers
+            default_query_id = await self._get_or_create_default_research_query(user_id)
+            
+            # Map to actual database columns based on schema
             paper_data = {
-                # TODO: Add user_id when column exists in database
-                "paper_id": paper_id,
+                "paper_id": paper_id,  # Custom paper_id field 
                 "title": title,
-                # TODO: Add other fields when columns are confirmed to exist:
-                # - authors, year, venue, doi, arxiv_id, abstract, pdf_url
+                "research_query_id": default_query_id,  # Required field - use default query for uploaded papers
+                "authors": authors,  # Authors array
             }
+            
+            # Add optional metadata if provided
+            if metadata:
+                if metadata.get("year"):
+                    paper_data["publication_year"] = metadata["year"]
+                if metadata.get("venue"):
+                    paper_data["venue"] = metadata["venue"]
+                if metadata.get("doi"):
+                    paper_data["doi"] = metadata["doi"] 
+                if metadata.get("arxiv_id"):
+                    paper_data["arxiv_id"] = metadata["arxiv_id"]
+                if metadata.get("abstract"):
+                    paper_data["abstract"] = metadata["abstract"]
+                if metadata.get("url"):
+                    paper_data["url"] = metadata["url"]
+                if metadata.get("pdf_url"):
+                    paper_data["pdf_url"] = metadata["pdf_url"]
             
             # Insert paper
             result = await asyncio.get_event_loop().run_in_executor(
