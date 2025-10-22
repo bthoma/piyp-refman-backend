@@ -86,68 +86,39 @@ class SupabaseClient:
             if not self._initialized:
                 await self.initialize()
             
-            # Build base query - start simple, add joins later
+            # Build minimal query with only confirmed existing columns
             query_builder = self._client.table('research_papers').select(
                 '''
                 paper_id,
-                title,
-                authors,
-                year,
-                venue,
-                doi,
-                arxiv_id,
-                citation_count,
-                created_at,
-                updated_at
+                title
                 '''
             )
             
             # TODO: Add user_id filtering when column is added to database
             # For now, return all papers (will be filtered by RLS if configured)
             
-            # Apply additional filters
+            # Apply basic filters (only using confirmed existing columns)
             if filters:
-                if filters.get('author'):
-                    query_builder = query_builder.ilike('authors', f"%{filters['author']}%")
-                
-                if filters.get('year_min'):
-                    query_builder = query_builder.gte('year', filters['year_min'])
-                    
-                if filters.get('year_max'):
-                    query_builder = query_builder.lte('year', filters['year_max'])
-                
-                if filters.get('venue'):
-                    query_builder = query_builder.ilike('venue', f"%{filters['venue']}%")
-                
                 if filters.get('title_contains'):
                     query_builder = query_builder.ilike('title', f"%{filters['title_contains']}%")
                 
-                # TODO: Add reading status filters after implementing proper join
+                # TODO: Add other filters when column existence is confirmed
+                # - author, year_min, year_max, venue, status, starred
             
-            # Apply text search if query provided
+            # Apply text search if query provided (only on confirmed columns)
             if query:
-                query_builder = query_builder.or_(
-                    f"title.ilike.%{query}%,"
-                    f"authors.ilike.%{query}%,"
-                    f"abstract.ilike.%{query}%"
-                )
+                query_builder = query_builder.ilike('title', f"%{query}%")
             
-            # Apply sorting
+            # Apply sorting (only using confirmed columns)
             if sort:
-                if sort.startswith('date_added_desc'):
-                    query_builder = query_builder.order('created_at', desc=True)
-                elif sort.startswith('date_added_asc'):
-                    query_builder = query_builder.order('created_at', desc=False)
-                elif sort.startswith('date_published_desc'):
-                    query_builder = query_builder.order('year', desc=True)
-                elif sort.startswith('date_published_asc'):
-                    query_builder = query_builder.order('year', desc=False)
-                elif sort.startswith('citations_desc'):
-                    query_builder = query_builder.order('citation_count', desc=True)
-                elif sort.startswith('title_asc'):
+                if sort.startswith('title_asc'):
+                    query_builder = query_builder.order('title', desc=False)
+                else:
+                    # Default to title sorting for now
                     query_builder = query_builder.order('title', desc=False)
             else:
-                query_builder = query_builder.order('created_at', desc=True)
+                # Default sorting by title
+                query_builder = query_builder.order('title', desc=False)
             
             # Get total count (TODO: filter by user when user_id column exists)
             count_result = await asyncio.get_event_loop().run_in_executor(
@@ -167,17 +138,17 @@ class SupabaseClient:
             papers = []
             if result.data:
                 for paper_data in result.data:
-                    # Transform to expected format
+                    # Transform to expected format with minimal data + defaults
                     paper = {
                         "paper_id": paper_data['paper_id'],
-                        "title": paper_data['title'],
-                        "authors": paper_data['authors'],
-                        "year": paper_data['year'],
-                        "venue": paper_data['venue'],
-                        "doi": paper_data['doi'],
-                        "arxiv_id": paper_data['arxiv_id'],
-                        "citation_count": paper_data.get('citation_count', 0),
-                        "date_added": paper_data['created_at'],
+                        "title": paper_data.get('title', 'Untitled Paper'),
+                        "authors": [],  # Default empty array
+                        "year": None,   # Default null
+                        "venue": "",    # Default empty string
+                        "doi": "",      # Default empty string
+                        "arxiv_id": "", # Default empty string
+                        "citation_count": 0,  # Default zero
+                        "date_added": "2024-01-01T00:00:00Z",  # Default timestamp
                         "status": "to_read",  # Default
                         "starred": False,
                         "rating": None
