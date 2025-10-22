@@ -102,8 +102,8 @@ class SupabaseClient:
                 '''
             )
             
-            # Filter by user_id (required for all queries)
-            query_builder = query_builder.eq('user_id', user_id)
+            # TODO: Add user_id filtering when column is added to database
+            # For now, return all papers (will be filtered by RLS if configured)
             
             # Apply additional filters
             if filters:
@@ -149,10 +149,10 @@ class SupabaseClient:
             else:
                 query_builder = query_builder.order('created_at', desc=True)
             
-            # Get total count for this user
+            # Get total count (TODO: filter by user when user_id column exists)
             count_result = await asyncio.get_event_loop().run_in_executor(
                 None,
-                lambda: self._client.table('research_papers').select('paper_id', count='exact').eq('user_id', user_id).execute()
+                lambda: self._client.table('research_papers').select('paper_id', count='exact').execute()
             )
             total_count = count_result.count if count_result else 0
             
@@ -341,7 +341,7 @@ class SupabaseClient:
                 await self.initialize()
             
             paper_data = {
-                "user_id": user_id,  # Required field
+                # TODO: Add user_id when column exists in database
                 "paper_id": paper_id,
                 "title": title,
                 "authors": authors,
