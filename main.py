@@ -144,14 +144,29 @@ async def root():
 async def health_check():
     """Health check endpoint"""
     try:
-        # Test agent connectivity
+        # Test agent connectivity and database
         agent_client = AgentClient()
+        
+        # Initialize if not already done
+        if not agent_client.initialized:
+            await agent_client.initialize()
+        
         agent_status = await agent_client.health_check()
         
+        # Determine overall health status
+        is_healthy = all(
+            "healthy" in status.lower() or "connected" in str(status).lower()
+            for status in agent_status.values()
+        )
+        
         return {
-            "status": "healthy",
+            "status": "healthy" if is_healthy else "degraded",
             "timestamp": datetime.utcnow().isoformat(),
-            "agents": agent_status
+            "agents": agent_status,
+            "database": {
+                "connected": agent_status.get("database") == "healthy",
+                "papers_count": agent_status.get("supabase_papers_count", "0")
+            }
         }
         
     except Exception as e:
@@ -279,15 +294,20 @@ async def task_websocket_endpoint(websocket: WebSocket, task_id: str):
             "message": str(e)
         })
 
+# Global agent client instance
+_global_agent_client = None
+
 # Startup event
 @app.on_event("startup")
 async def startup_event():
     """Application startup"""
+    global _global_agent_client
+    
     logger.info("Starting PiyP Reference Manager API")
     
-    # Initialize agent client
-    agent_client = AgentClient()
-    await agent_client.initialize()
+    # Initialize global agent client
+    _global_agent_client = AgentClient()
+    await _global_agent_client.initialize()
     
     logger.info("PiyP Reference Manager API started successfully")
 

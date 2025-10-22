@@ -4,31 +4,29 @@ Stats API Router.
 Handles user statistics and dashboard metrics.
 """
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from typing import Dict, Any
 import logging
+from services.agent_client import AgentClient
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def get_agent_client():
+    """Get agent client dependency"""
+    return AgentClient()
+
+
 @router.get("/")
 async def get_user_stats(
-    user_id: str = Query(...)
+    user_id: str = Query(...),
+    agent_client: AgentClient = Depends(get_agent_client)
 ):
     """Get user statistics for dashboard"""
     try:
-        # TODO: Implement real stats from database
-        # For now return mock stats
-        stats = {
-            "total_papers": 0,
-            "ingested_papers": 0,
-            "to_read": 0,
-            "reading": 0,
-            "read": 0,
-            "starred": 0,
-            "recent_activity": 0
-        }
+        # Get real stats from database via agent client
+        stats = await agent_client.get_user_stats(user_id)
         
         return {"stats": stats}
         

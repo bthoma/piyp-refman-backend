@@ -9,6 +9,7 @@ import logging
 from typing import Dict, List, Optional, Any
 import sys
 import os
+from .supabase_client import SupabaseClient
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -29,11 +30,15 @@ class AgentClient:
     
     def __init__(self):
         self.initialized = False
+        self.supabase_client = SupabaseClient()
         
     async def initialize(self):
-        """Initialize agent connections"""
+        """Initialize agent connections and database"""
         try:
             logger.info("Initializing agent client")
+            
+            # Initialize Supabase client
+            await self.supabase_client.initialize()
             
             # Test agent connectivity
             await self.health_check()
@@ -46,15 +51,19 @@ class AgentClient:
             raise
     
     async def health_check(self) -> Dict[str, str]:
-        """Check agent health status"""
-        # Return mock healthy status for all agents
+        """Check agent health status and database connectivity"""
+        # Check database connectivity
+        db_health = await self.supabase_client.health_check()
+        
         return {
             "reference_manager_orchestrator": "healthy (mock)",
             "search_papers": "healthy (mock)",
             "analyze_gaps": "healthy (mock)",
-            "pdf_retrieval": "healthy (mock)",
+            "pdf_retrieval": "healthy (mock)", 
             "ingestion": "healthy (mock)",
-            "knowledge_gap": "healthy (mock)"
+            "knowledge_gap": "healthy (mock)",
+            "database": f"{'healthy' if db_health.get('connected') else 'unhealthy'}",
+            "supabase_papers_count": str(db_health.get('total_papers', 0))
         }
     
     # Orchestrator methods
@@ -95,39 +104,39 @@ class AgentClient:
         limit: int = 20,
         offset: int = 0
     ) -> dict:
-        """Search papers using Library Curator"""
-        # Return mock search results
-        mock_papers = [
-            {
-                "paper_id": f"mock_paper_{i+offset}",
-                "title": f"Mock Paper {i+offset+1}: {mode.upper()} Search Results",
-                "authors": ["Dr. Mock Author", "Prof. Test Researcher"],
-                "year": 2023 - (i % 5),
-                "venue": "Mock Conference on Research",
-                "abstract": f"This is a mock paper abstract for testing the {mode} search mode. Query: '{query}'",
-                "doi": f"10.1000/mock.{i+offset}",
-                "citation_count": 10 + i,
-                "pdf_available": i % 2 == 0,
-                "status": ["to_read", "reading", "read"][i % 3],
-                "starred": i % 4 == 0,
-                "rating": (i % 5) + 1,
-                "tags": ["mock", "test", mode],
-                "collections": [],
-                "date_added": "2024-01-01T00:00:00Z",
-                "notes_count": i % 3
+        """Search papers using database query"""
+        try:
+            # Use real database search
+            result = await self.supabase_client.search_papers(
+                user_id=user_id,
+                query=query,
+                filters=filters,
+                sort=sort,
+                limit=limit,
+                offset=offset
+            )
+            
+            # Add search mode context to result
+            result["query"] = query
+            result["mode"] = mode
+            result["limit"] = limit
+            result["offset"] = offset
+            
+            logger.info(f"Search completed: {len(result.get('papers', []))} papers found")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Search papers failed: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "papers": [],
+                "total": 0,
+                "query": query,
+                "mode": mode,
+                "limit": limit,
+                "offset": offset
             }
-            for i in range(min(limit, 5))  # Return up to 5 mock papers or limit
-        ]
-        
-        return {
-            "success": True,
-            "papers": mock_papers,
-            "total": 25,  # Mock total
-            "query": query,
-            "mode": mode,
-            "limit": limit,
-            "offset": offset
-        }
     
     async def export_citations(self, paper_ids: List[str], style: str, format: str, user_id: str) -> dict:
         """Export citations"""
@@ -243,16 +252,31 @@ class AgentClient:
         filename: str,
         metadata: Optional[dict] = None
     ) -> dict:
-        """Upload paper via MCP tools"""
-        # This would integrate with MCP tools
-        # For now, simulate upload
-        return {
-            "success": True,
-            "paper_id": paper_id,
-            "pdf_path": f"/storage/users/{user_id}/papers/{paper_id}.pdf",
-            "file_size": len(file_data) * 3 // 4,  # Estimate from base64
-            "checksum": "sha256:placeholder"
-        }
+        """Upload paper and create database record"""
+        try:
+            # Create paper in database
+            title = metadata.get('title', filename) if metadata else filename
+            authors = metadata.get('authors', []) if metadata else []
+            
+            result = await self.supabase_client.create_paper(
+                paper_id=paper_id,
+                title=title,
+                authors=authors,
+                user_id=user_id,
+                metadata=metadata
+            )
+            
+            if result.get('success'):
+                # TODO: Integrate with actual file storage via MCP tools
+                result['pdf_path'] = f"/storage/users/{user_id}/papers/{paper_id}.pdf"
+                result['file_size'] = len(file_data) * 3 // 4  # Estimate from base64
+                result['checksum'] = "sha256:placeholder"
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Upload paper failed: {str(e)}")
+            return {"success": False, "error": str(e)}
     
     async def trigger_ingestion(
         self,
@@ -271,31 +295,23 @@ class AgentClient:
         }
     
     async def get_paper_details(self, paper_id: str, user_id: str) -> Optional[dict]:
-        """Get detailed paper information"""
-        # This would query the database directly
-        # For now, return placeholder
-        return {
-            "paper_id": paper_id,
-            "title": "Sample Paper Title",
-            "authors": ["Author One", "Author Two"],
-            "year": 2023,
-            "venue": "Sample Conference",
-            "abstract": "This is a sample abstract...",
-            "pdf_available": True,
-            "status": "read",
-            "starred": False,
-            "tags": ["machine learning", "nlp"],
-            "notes": []
-        }
+        """Get detailed paper information from database"""
+        try:
+            return await self.supabase_client.get_paper_details(paper_id, user_id)
+        except Exception as e:
+            logger.error(f"Get paper details failed: {str(e)}")
+            return None
     
     async def delete_paper(self, paper_id: str, user_id: str) -> dict:
-        """Delete paper"""
-        # This would integrate with MCP tools
-        return {
-            "success": True,
-            "paper_id": paper_id,
-            "message": "Paper deleted successfully"
-        }
+        """Delete paper from database"""
+        try:
+            result = await self.supabase_client.delete_paper(paper_id, user_id)
+            if result.get('success'):
+                result['message'] = 'Paper deleted successfully'
+            return result
+        except Exception as e:
+            logger.error(f"Delete paper failed: {str(e)}")
+            return {"success": False, "error": str(e)}
     
     async def add_paper_note(
         self,
@@ -331,33 +347,57 @@ class AgentClient:
         starred: Optional[bool] = None,
         rating: Optional[int] = None
     ) -> dict:
-        """Update paper reading status"""
-        # This would integrate with database
-        return {
-            "success": True,
-            "paper_id": paper_id,
-            "status": status,
-            "starred": starred,
-            "rating": rating
-        }
+        """Update paper reading status in database"""
+        try:
+            result = await self.supabase_client.update_reading_status(
+                paper_id=paper_id,
+                user_id=user_id,
+                status=status,
+                starred=starred,
+                rating=rating
+            )
+            
+            if result.get('success'):
+                result.update({
+                    'paper_id': paper_id,
+                    'status': status,
+                    'starred': starred,
+                    'rating': rating
+                })
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Update paper status failed: {str(e)}")
+            return {"success": False, "error": str(e)}
     
     async def add_to_collection(self, paper_id: str, user_id: str, collection_id: int) -> dict:
-        """Add paper to collection"""
-        # This would integrate with database
-        return {
-            "success": True,
-            "paper_id": paper_id,
-            "collection_id": collection_id
-        }
+        """Add paper to collection in database"""
+        try:
+            result = await self.supabase_client.add_to_collection(paper_id, user_id, collection_id)
+            if result.get('success'):
+                result.update({
+                    'paper_id': paper_id,
+                    'collection_id': collection_id
+                })
+            return result
+        except Exception as e:
+            logger.error(f"Add to collection failed: {str(e)}")
+            return {"success": False, "error": str(e)}
     
     async def add_paper_tags(self, paper_id: str, user_id: str, tags: List[str]) -> dict:
-        """Add tags to paper"""
-        # This would integrate with database
-        return {
-            "success": True,
-            "paper_id": paper_id,
-            "tags": tags
-        }
+        """Add tags to paper in database"""
+        try:
+            result = await self.supabase_client.add_paper_tags(paper_id, user_id, tags)
+            if result.get('success'):
+                result.update({
+                    'paper_id': paper_id,
+                    'tags': tags
+                })
+            return result
+        except Exception as e:
+            logger.error(f"Add paper tags failed: {str(e)}")
+            return {"success": False, "error": str(e)}
     
     async def get_task_status(self, task_id: str) -> Optional[dict]:
         """Get async task status"""
@@ -368,3 +408,19 @@ class AgentClient:
             "progress": 0.5,
             "created_at": "2024-10-19T12:00:00Z"
         }
+    
+    async def get_user_stats(self, user_id: str) -> dict:
+        """Get user statistics from database"""
+        try:
+            return await self.supabase_client.get_user_stats(user_id)
+        except Exception as e:
+            logger.error(f"Get user stats failed: {str(e)}")
+            return {
+                "total_papers": 0,
+                "ingested_papers": 0,
+                "to_read": 0,
+                "reading": 0,
+                "read": 0,
+                "starred": 0,
+                "recent_activity": 0
+            }
