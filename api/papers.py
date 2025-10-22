@@ -35,7 +35,7 @@ def get_pdf_service():
 settings = get_settings()
 
 
-@router.get("/papers", response_model=PaperListResponse)
+@router.get("/", response_model=PaperListResponse)
 async def list_papers(
     user_id: str = Query(...),
     skip: int = Query(0, ge=0),
@@ -116,7 +116,7 @@ async def list_papers(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/papers/{paper_id}", response_model=PaperDetailResponse)
+@router.get("/{paper_id}", response_model=PaperDetailResponse)
 async def get_paper(
     paper_id: str,
     user_id: str = Query(...),
@@ -141,7 +141,7 @@ async def get_paper(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/papers/upload", response_model=UploadResponse)
+@router.post("/upload", response_model=UploadResponse)
 async def upload_paper(
     file: UploadFile = File(...),
     user_id: str = Form(...),
@@ -240,7 +240,7 @@ async def upload_paper(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/papers/{paper_id}")
+@router.delete("/{paper_id}")
 async def delete_paper(
     paper_id: str,
     user_id: str = Query(...),
@@ -262,7 +262,7 @@ async def delete_paper(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/papers/{paper_id}/pdf")
+@router.get("/{paper_id}/pdf")
 async def download_pdf(
     paper_id: str,
     user_id: str = Query(...),
@@ -290,7 +290,7 @@ async def download_pdf(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/papers/{paper_id}/notes", response_model=NoteResponse)
+@router.post("/{paper_id}/notes", response_model=NoteResponse)
 async def add_note(
     paper_id: str,
     note: NoteCreate,
@@ -319,7 +319,7 @@ async def add_note(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/papers/{paper_id}/status")
+@router.put("/{paper_id}/status")
 async def update_status(
     paper_id: str,
     status: str,
@@ -359,7 +359,7 @@ async def update_status(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/papers/batch-action")
+@router.post("/batch-action")
 async def batch_action(
     action: str,
     paper_ids: List[str],
