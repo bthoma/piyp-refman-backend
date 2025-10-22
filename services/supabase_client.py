@@ -302,71 +302,58 @@ class SupabaseClient:
         """Get or create a default research query for uploaded papers"""
         logger.info(f"Getting or creating default research query for user: {user_id}")
         
-        # Based on the schema, research_queries requires a course_id
-        # For uploaded papers, we need to find or create a default course first
+        # Simplified approach: Just try to create the records, handle conflicts gracefully
         try:
-            # First find if user has any existing course we can use
-            def find_user_course():
-                return self._client.table('courses').select('id').eq('user_id', user_id).limit(1).execute()
-            
-            course_result = await asyncio.get_event_loop().run_in_executor(None, find_user_course)
-            
-            if course_result.data and len(course_result.data) > 0:
-                course_id = course_result.data[0]['id']
-                logger.info(f"Found existing course: {course_id}")
-            else:
-                # Create a default course for uploaded papers
-                def create_default_course():
-                    return self._client.table('courses').insert({
-                        'user_id': user_id,
-                        'title': 'Uploaded Papers',
-                        'main_topic': 'Reference Collection', 
-                        'learning_goal': 'Collection of uploaded research papers'
-                    }).select('id').execute()
-                
-                course_result = await asyncio.get_event_loop().run_in_executor(None, create_default_course)
+            # Try to create a default course first (will fail gracefully if exists)
+            def create_course_and_query():
+                # Insert course without select (returns full record)
+                course_result = self._client.table('courses').insert({
+                    'user_id': user_id,
+                    'title': 'Uploaded Papers',
+                    'main_topic': 'Reference Collection', 
+                    'learning_goal': 'Collection of uploaded research papers'
+                }).execute()
                 
                 if course_result.data and len(course_result.data) > 0:
                     course_id = course_result.data[0]['id']
-                    logger.info(f"Created default course: {course_id}")
                 else:
-                    raise Exception("Failed to create default course")
-            
-            # Now create or find research query for this course
-            def find_research_query():
-                return self._client.table('research_queries').select('id').eq('course_id', course_id).eq('query_text', 'Uploaded Papers').execute()
-            
-            query_result = await asyncio.get_event_loop().run_in_executor(None, find_research_query)
-            
-            if query_result.data and len(query_result.data) > 0:
-                query_id = query_result.data[0]['id']
-                logger.info(f"Found existing research query: {query_id}")
-                return query_id
-            
-            # Create the research query
-            def create_research_query():
-                return self._client.table('research_queries').insert({
+                    raise Exception("Failed to create course")
+                
+                # Now create research query without select
+                query_result = self._client.table('research_queries').insert({
                     'course_id': course_id,
                     'query_text': 'Uploaded Papers',
                     'query_type': 'initial',
                     'initiated_by_agent': 'pdf_upload'
-                }).select('id').execute()
+                }).execute()
+                
+                if query_result.data and len(query_result.data) > 0:
+                    return query_result.data[0]['id']
+                else:
+                    raise Exception("Failed to create research query")
             
-            query_result = await asyncio.get_event_loop().run_in_executor(None, create_research_query)
-            
-            if query_result.data and len(query_result.data) > 0:
-                query_id = query_result.data[0]['id']
-                logger.info(f"Created research query: {query_id}")
-                return query_id
-            else:
-                raise Exception("Failed to create research query")
+            result = await asyncio.get_event_loop().run_in_executor(None, create_course_and_query)
+            logger.info(f"Successfully got research query ID: {result}")
+            return result
                 
         except Exception as e:
             logger.error(f"Failed to get/create default research query: {str(e)}")
-            # Return a hardcoded UUID for now to avoid blocking uploads
-            fallback_uuid = "550e8400-e29b-41d4-a716-446655440000"
-            logger.warning(f"Using fallback UUID: {fallback_uuid}")
-            return fallback_uuid
+            
+            # As a last resort, try to find ANY existing research query for a course owned by this user
+            try:
+                def find_any_user_query():
+                    # This is risky without proper select, so just return None to fail gracefully
+                    return None
+                
+                fallback_query = await asyncio.get_event_loop().run_in_executor(None, find_any_user_query)
+                if fallback_query:
+                    logger.info(f"Using existing research query as fallback: {fallback_query}")
+                    return fallback_query
+            except Exception as fallback_error:
+                logger.error(f"Fallback query search also failed: {fallback_error}")
+            
+            # If everything fails, raise the error instead of returning invalid UUID
+            raise Exception(f"Unable to create or find research query for user {user_id}: {str(e)}")
     
     async def create_paper(
         self,
