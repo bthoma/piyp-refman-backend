@@ -230,7 +230,28 @@ class SupabaseClient:
                 None,
                 lambda: self._client.table('research_papers').select(
                     '''
-                    *,
+                    id,
+                    user_id,
+                    paper_id,
+                    title,
+                    authors,
+                    abstract,
+                    year,
+                    published,
+                    doi,
+                    arxiv_id,
+                    pmid,
+                    pmc_id,
+                    venue,
+                    citation_count,
+                    fields_of_study,
+                    url,
+                    pdf_url,
+                    pdf_path,
+                    status,
+                    processing_status,
+                    created_at,
+                    updated_at,
                     paper_reading_status (
                         status,
                         starred,
@@ -335,6 +356,7 @@ class SupabaseClient:
                 await self.initialize()
             
             paper_data = {
+                "user_id": user_id,  # Required field
                 "paper_id": paper_id,
                 "title": title,
                 "authors": authors,
@@ -344,8 +366,7 @@ class SupabaseClient:
                 "arxiv_id": metadata.get('arxiv_id') if metadata else None,
                 "abstract": metadata.get('abstract', '') if metadata else '',
                 "pdf_url": metadata.get('pdf_url') if metadata else None,
-                "created_at": datetime.utcnow().isoformat(),
-                "updated_at": datetime.utcnow().isoformat()
+                # Don't manually set timestamps - let the database handle it
             }
             
             # Insert paper
@@ -376,7 +397,7 @@ class SupabaseClient:
             if not self._initialized:
                 await self.initialize()
             
-            updates['updated_at'] = datetime.utcnow().isoformat()
+            # Let the database handle updated_at via triggers
             
             result = await asyncio.get_event_loop().run_in_executor(
                 None,
@@ -445,8 +466,8 @@ class SupabaseClient:
                 "paper_id": paper_id,
                 "user_id": user_id,
                 "status": status,
-                "starred": False,
-                "updated_at": datetime.utcnow().isoformat()
+                "starred": False
+                # Let database handle updated_at
             }
             
             result = await asyncio.get_event_loop().run_in_executor(
@@ -473,14 +494,15 @@ class SupabaseClient:
             if not self._initialized:
                 await self.initialize()
             
-            updates = {"updated_at": datetime.utcnow().isoformat()}
+            updates = {}  # Let database handle updated_at
             
             if status is not None:
                 updates["status"] = status
-                if status == "reading" and not updates.get("started_at"):
-                    updates["started_at"] = datetime.utcnow().isoformat()
-                elif status == "read" and not updates.get("completed_at"):
-                    updates["completed_at"] = datetime.utcnow().isoformat()
+                # Set timestamps for status transitions
+                if status == "reading":
+                    updates["started_at"] = "now()"
+                elif status == "read":
+                    updates["completed_at"] = "now()"
             
             if starred is not None:
                 updates["starred"] = starred
@@ -547,8 +569,8 @@ class SupabaseClient:
                 None,
                 lambda: self._client.table('collection_papers').upsert({
                     "collection_id": collection_id,
-                    "paper_id": paper_id,
-                    "added_at": datetime.utcnow().isoformat()
+                    "paper_id": paper_id
+                    # Let database handle added_at via DEFAULT NOW()
                 }).execute()
             )
             
@@ -577,8 +599,8 @@ class SupabaseClient:
                     None,
                     lambda: self._client.table('tags').upsert({
                         "user_id": user_id,
-                        "tag_name": tag_name,
-                        "created_at": datetime.utcnow().isoformat()
+                        "tag_name": tag_name
+                        # Let database handle created_at via DEFAULT NOW()
                     }).execute()
                 )
                 
@@ -590,8 +612,8 @@ class SupabaseClient:
                         None,
                         lambda: self._client.table('paper_tags').upsert({
                             "paper_id": paper_id,
-                            "tag_id": tag_id,
-                            "added_at": datetime.utcnow().isoformat()
+                            "tag_id": tag_id
+                            # Let database handle added_at via DEFAULT NOW()
                         }).execute()
                     )
             
