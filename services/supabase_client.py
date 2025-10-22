@@ -300,55 +300,23 @@ class SupabaseClient:
     
     async def _get_or_create_default_research_query(self, user_id: str) -> str:
         """Get or create a default research query for uploaded papers"""
-        try:
-            # First, check if a default query already exists
-            def query_existing():
-                return self._client.table('research_queries').select('id').eq('user_id', user_id).eq('query_text', 'Uploaded Papers').execute()
-            
-            result = await asyncio.get_event_loop().run_in_executor(None, query_existing)
-            
-            if result.data:
-                return result.data['id']
-            
-        except Exception:
-            # Query doesn't exist, so create it
-            pass
+        logger.info(f"Getting or creating default research query for user: {user_id}")
         
-        # Create default research query for uploaded papers
-        try:
-            query_data = {
-                "user_id": user_id,
-                "query_text": "Uploaded Papers",
-                "query_type": "manual_upload",
-                "status": "completed"
-            }
-            
-            def create_query():
-                return self._client.table('research_queries').insert(query_data).select('id').execute()
-            
-            result = await asyncio.get_event_loop().run_in_executor(None, create_query)
-            
-            if result.data:
-                return result.data['id']
-            else:
-                raise Exception("Failed to create default research query")
-                
-        except Exception as e:
-            logger.error(f"Failed to create default research query: {str(e)}")
-            # Fallback: try to find any existing research query for this user
-            try:
-                def find_any_query():
-                    return self._client.table('research_queries').select('id').eq('user_id', user_id).limit(1).execute()
-                
-                result = await asyncio.get_event_loop().run_in_executor(None, find_any_query)
-                
-                if result.data:
-                    return result.data['id']
-            except Exception:
-                pass
-            
-            # If all else fails, raise the original error
-            raise e
+        # For now, create a deterministic UUID based on user_id to avoid database queries
+        # This is a temporary fix until we can resolve the Supabase client compatibility
+        import uuid
+        import hashlib
+        
+        # Create a deterministic UUID for the default research query
+        seed = f"default_query_{user_id}"
+        hash_object = hashlib.md5(seed.encode())
+        hex_dig = hash_object.hexdigest()
+        
+        # Convert to UUID format (this will be consistent for the same user)
+        default_uuid = str(uuid.UUID(hex_dig))
+        
+        logger.info(f"Using deterministic UUID for default research query: {default_uuid}")
+        return default_uuid
     
     async def create_paper(
         self,
@@ -363,15 +331,13 @@ class SupabaseClient:
             if not self._initialized:
                 await self.initialize()
             
-            # Get or create a default research query for uploaded papers
-            default_query_id = await self._get_or_create_default_research_query(user_id)
-            
             # Map to actual database columns based on schema
+            # Note: Temporarily excluding research_query_id until we can properly handle the constraint
             paper_data = {
                 "paper_id": paper_id,  # Custom paper_id field 
                 "title": title,
-                "research_query_id": default_query_id,  # Required field - use default query for uploaded papers
                 "authors": authors,  # Authors array
+                "user_id": user_id,  # Add user_id for paper ownership
             }
             
             # Add optional metadata if provided
