@@ -15,6 +15,7 @@ import os
 from models.paper import PaperListResponse, PaperDetailResponse, UploadResponse, NoteCreate, NoteResponse
 from services.agent_client import AgentClient
 from services.pdf_service import PDFService
+from services.pdf_metadata_extractor import extract_pdf_metadata
 from config import get_settings
 
 # Configure logging
@@ -176,10 +177,14 @@ async def upload_paper(
         # Read file data
         file_data = await file.read()
         
+        # Extract metadata from PDF automatically
+        logger.info(f"Extracting metadata from uploaded PDF: {file.filename}")
+        extracted_metadata = await extract_pdf_metadata(file_data, file.filename)
+        
         # Generate paper ID
         paper_id = f"paper_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{len(file_data)}"
         
-        # Parse authors if provided
+        # Parse authors if provided by user
         author_list = []
         if authors:
             try:
@@ -189,14 +194,23 @@ async def upload_paper(
                 # Fallback: split by comma
                 author_list = [a.strip() for a in authors.split(",")]
         
-        # Build metadata
+        # Build metadata - prioritize user-provided data over extracted data
         metadata = {}
-        if title:
-            metadata["title"] = title
-        if author_list:
-            metadata["authors"] = author_list
-        if year:
-            metadata["year"] = year
+        
+        # Use user-provided data first, fall back to extracted data
+        metadata["title"] = title or extracted_metadata.get("title", file.filename)
+        metadata["authors"] = author_list or extracted_metadata.get("authors", [])
+        metadata["year"] = year or extracted_metadata.get("year")
+        
+        # Add additional extracted metadata
+        if extracted_metadata.get("venue"):
+            metadata["venue"] = extracted_metadata["venue"]
+        if extracted_metadata.get("doi"):
+            metadata["doi"] = extracted_metadata["doi"]
+        if extracted_metadata.get("abstract"):
+            metadata["abstract"] = extracted_metadata["abstract"]
+        if extracted_metadata.get("keywords"):
+            metadata["keywords"] = extracted_metadata["keywords"]
         
         # Upload paper via agent
         upload_result = await agent_client.upload_paper(
@@ -230,7 +244,8 @@ async def upload_paper(
             filename=file.filename,
             file_size=len(file_data),
             status="uploaded" if not auto_ingest else "ingesting",
-            ingestion_task_id=ingestion_task_id
+            ingestion_task_id=ingestion_task_id,
+            extracted_metadata=extracted_metadata  # NEW: Return extracted metadata to frontend
         )
         
     except HTTPException:

@@ -93,6 +93,7 @@ class UploadResponse(BaseModel):
     file_size: Optional[int] = None
     status: Optional[str] = None
     ingestion_task_id: Optional[str] = None
+    extracted_metadata: Optional[Dict[str, Any]] = None  # NEW: Extracted PDF metadata
     error: Optional[str] = None
 
 
