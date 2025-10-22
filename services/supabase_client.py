@@ -302,21 +302,71 @@ class SupabaseClient:
         """Get or create a default research query for uploaded papers"""
         logger.info(f"Getting or creating default research query for user: {user_id}")
         
-        # For now, create a deterministic UUID based on user_id to avoid database queries
-        # This is a temporary fix until we can resolve the Supabase client compatibility
-        import uuid
-        import hashlib
-        
-        # Create a deterministic UUID for the default research query
-        seed = f"default_query_{user_id}"
-        hash_object = hashlib.md5(seed.encode())
-        hex_dig = hash_object.hexdigest()
-        
-        # Convert to UUID format (this will be consistent for the same user)
-        default_uuid = str(uuid.UUID(hex_dig))
-        
-        logger.info(f"Using deterministic UUID for default research query: {default_uuid}")
-        return default_uuid
+        # Based on the schema, research_queries requires a course_id
+        # For uploaded papers, we need to find or create a default course first
+        try:
+            # First find if user has any existing course we can use
+            def find_user_course():
+                return self._client.table('courses').select('id').eq('user_id', user_id).limit(1).execute()
+            
+            course_result = await asyncio.get_event_loop().run_in_executor(None, find_user_course)
+            
+            if course_result.data and len(course_result.data) > 0:
+                course_id = course_result.data[0]['id']
+                logger.info(f"Found existing course: {course_id}")
+            else:
+                # Create a default course for uploaded papers
+                def create_default_course():
+                    return self._client.table('courses').insert({
+                        'user_id': user_id,
+                        'title': 'Uploaded Papers',
+                        'main_topic': 'Reference Collection', 
+                        'learning_goal': 'Collection of uploaded research papers'
+                    }).select('id').execute()
+                
+                course_result = await asyncio.get_event_loop().run_in_executor(None, create_default_course)
+                
+                if course_result.data and len(course_result.data) > 0:
+                    course_id = course_result.data[0]['id']
+                    logger.info(f"Created default course: {course_id}")
+                else:
+                    raise Exception("Failed to create default course")
+            
+            # Now create or find research query for this course
+            def find_research_query():
+                return self._client.table('research_queries').select('id').eq('course_id', course_id).eq('query_text', 'Uploaded Papers').execute()
+            
+            query_result = await asyncio.get_event_loop().run_in_executor(None, find_research_query)
+            
+            if query_result.data and len(query_result.data) > 0:
+                query_id = query_result.data[0]['id']
+                logger.info(f"Found existing research query: {query_id}")
+                return query_id
+            
+            # Create the research query
+            def create_research_query():
+                return self._client.table('research_queries').insert({
+                    'course_id': course_id,
+                    'query_text': 'Uploaded Papers',
+                    'query_type': 'initial',
+                    'initiated_by_agent': 'pdf_upload'
+                }).select('id').execute()
+            
+            query_result = await asyncio.get_event_loop().run_in_executor(None, create_research_query)
+            
+            if query_result.data and len(query_result.data) > 0:
+                query_id = query_result.data[0]['id']
+                logger.info(f"Created research query: {query_id}")
+                return query_id
+            else:
+                raise Exception("Failed to create research query")
+                
+        except Exception as e:
+            logger.error(f"Failed to get/create default research query: {str(e)}")
+            # Return a hardcoded UUID for now to avoid blocking uploads
+            fallback_uuid = "550e8400-e29b-41d4-a716-446655440000"
+            logger.warning(f"Using fallback UUID: {fallback_uuid}")
+            return fallback_uuid
     
     async def create_paper(
         self,
@@ -331,13 +381,15 @@ class SupabaseClient:
             if not self._initialized:
                 await self.initialize()
             
-            # Map to actual database columns based on schema
-            # Note: Temporarily excluding research_query_id until we can properly handle the constraint
+            # Get or create a default research query for uploaded papers
+            default_query_id = await self._get_or_create_default_research_query(user_id)
+            
+            # Map to actual database columns based on discovered schema
             paper_data = {
-                "paper_id": paper_id,  # Custom paper_id field 
+                "research_query_id": default_query_id,  # Required UUID field
                 "title": title,
                 "authors": authors,  # Authors array
-                "user_id": user_id,  # Add user_id for paper ownership
+                "paper_id": paper_id,  # External paper ID
             }
             
             # Add optional metadata if provided
