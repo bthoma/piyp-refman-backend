@@ -302,13 +302,34 @@ class SupabaseClient:
         """Get or create a default research query for uploaded papers"""
         logger.info(f"Getting or creating default research query for user: {user_id}")
         
+        # Convert user_id to UUID if it's a string like "default_user"
+        try:
+            import uuid
+            if user_id == "default_user" or not user_id:
+                # Create a consistent UUID for the default user
+                user_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, "default_user"))
+            else:
+                # Try to parse as UUID, or create one from the string
+                try:
+                    user_uuid = str(uuid.UUID(user_id))
+                except ValueError:
+                    # If not a valid UUID, create one from the string
+                    user_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, user_id))
+            
+            logger.info(f"Using UUID: {user_uuid} for user: {user_id}")
+            
+        except Exception as e:
+            logger.error(f"UUID conversion failed: {e}")
+            # Fallback to a default UUID
+            user_uuid = "550e8400-e29b-41d4-a716-446655440001"
+        
         # Simplified approach: Just try to create the records, handle conflicts gracefully
         try:
             # Try to create a default course first (will fail gracefully if exists)
             def create_course_and_query():
                 # Insert course without select (returns full record)
                 course_result = self._client.table('courses').insert({
-                    'user_id': user_id,
+                    'user_id': user_uuid,  # Use UUID instead of string
                     'title': 'Uploaded Papers',
                     'main_topic': 'Reference Collection', 
                     'learning_goal': 'Collection of uploaded research papers'
