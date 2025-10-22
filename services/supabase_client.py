@@ -24,15 +24,13 @@ class SupabaseClient:
         self._initialized = False
     
     async def initialize(self):
-        """Initialize Supabase client connection"""
+        """Initialize connection to Supabase"""
         try:
+            logger.info("Initializing Supabase connection...")
             self._client = create_client(
                 self.settings.SUPABASE_URL,
                 self.settings.SUPABASE_SERVICE_ROLE_KEY
             )
-            
-            # Test connection
-            await self._execute_simple_query("health_check")
             self._initialized = True
             logger.info("Supabase client initialized successfully")
             
@@ -40,38 +38,23 @@ class SupabaseClient:
             logger.error(f"Failed to initialize Supabase client: {str(e)}")
             raise
     
-    async def _execute_simple_query(self, table: str, operation: str = "SELECT 1"):
-        """Execute simple query for health checks"""
-        if not self._initialized or not self._client:
-            await self.initialize()
-        
-        try:
-            # Run a simple query to test connection
-            loop = asyncio.get_event_loop()
-            if table == "health_check":
-                # Just test basic connection
-                result = await loop.run_in_executor(
-                    None,
-                    lambda: self._client.table('research_papers').select('paper_id', count='exact').limit(1).execute()
-                )
-            else:
-                result = await loop.run_in_executor(
-                    None,
-                    lambda: self._client.table(table).select('*').limit(1).execute()
-                )
-            return result
-        except Exception as e:
-            logger.error(f"Query execution failed: {table} - {str(e)}")
-            raise
     
     async def health_check(self) -> Dict[str, Any]:
-        """Check Supabase connection health"""
+        """Check if database is accessible"""
         try:
-            if not self._initialized:
-                await self.initialize()
+            if not self._initialized or not self._client:
+                return {
+                    "status": "unhealthy",
+                    "connected": False,
+                    "error": "Client not initialized"
+                }
             
             # Test basic query
-            result = await self._execute_simple_query("health_check")
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                lambda: self._client.table('research_papers').select('paper_id', count='exact').limit(1).execute()
+            )
             
             return {
                 "status": "healthy",
@@ -80,6 +63,7 @@ class SupabaseClient:
             }
             
         except Exception as e:
+            logger.error(f"Supabase health check failed: {str(e)}")
             return {
                 "status": "unhealthy", 
                 "connected": False,
