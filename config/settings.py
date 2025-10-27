@@ -18,7 +18,8 @@ class Settings(BaseSettings):
     # Environment
     environment: str = os.getenv("ENVIRONMENT", "development")
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
-    api_port: int = int(os.getenv("API_PORT", "8000"))
+    # Railway uses PORT, local dev uses API_PORT
+    api_port: int = int(os.getenv("PORT", os.getenv("API_PORT", "8000")))
     
     # JWT Configuration
     jwt_secret_key: str = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
