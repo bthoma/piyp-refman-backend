@@ -1,0 +1,184 @@
+"""
+Core Domain Router - Authentication and User Management
+Uses Supabase Auth for authentication.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Dict, Any
+
+from config.database import get_client
+from .schemas import (
+    UserCreate,
+    UserLogin,
+    AuthResponse,
+    Token,
+    RefreshTokenRequest,
+    ProfileUpdateRequest,
+    UserProfile
+)
+from .auth import (
+    signup_user,
+    login_user,
+    refresh_access_token,
+    logout_user
+)
+from .middleware import get_current_user_id, get_current_user, require_admin
+
+router = APIRouter()
+
+
+@router.post("/register", response_model=AuthResponse)
+async def register(user_data: UserCreate):
+    """
+    Register a new user with Supabase Auth.
+    Creates user in auth.users and profile in core.user_profiles.
+    """
+    result = signup_user(
+        email=user_data.email,
+        password=user_data.password,
+        full_name=user_data.full_name
+    )
+    return result
+
+
+@router.post("/login", response_model=AuthResponse)
+async def login(credentials: UserLogin):
+    """
+    Login user with Supabase Auth.
+    Returns JWT tokens and user profile.
+    """
+    result = login_user(
+        email=credentials.email,
+        password=credentials.password
+    )
+    return result
+
+
+@router.post("/refresh", response_model=Token)
+async def refresh_token(request: RefreshTokenRequest):
+    """
+    Refresh an expired access token using refresh token.
+    """
+    result = refresh_access_token(request.refresh_token)
+    return Token(**result)
+
+
+@router.post("/logout")
+async def logout(user_id: str = Depends(get_current_user_id)):
+    """
+    Logout current user (invalidate session).
+    """
+    return logout_user()
+
+
+@router.get("/me")
+async def get_current_user_profile(user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Get current authenticated user's profile.
+    Protected endpoint - requires valid JWT.
+    """
+    return {"user": user}
+
+
+@router.patch("/profile")
+async def update_profile(
+    updates: ProfileUpdateRequest,
+    user_id: str = Depends(get_current_user_id)
+):
+    """
+    Update user profile (non-protected fields only).
+    Protected fields (tier, monthly_budget_usd, is_admin) require admin.
+    """
+    client = get_client()
+
+    # Build update dict (only include provided fields)
+    update_data = updates.model_dump(exclude_none=True)
+
+    if not update_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields to update"
+        )
+
+    # Update profile
+    result = client.table('user_profiles').update(update_data).eq('id', user_id).execute()
+
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User profile not found"
+        )
+
+    return {"profile": result.data[0]}
+
+
+# Admin endpoints
+@router.get("/admin/users")
+async def list_users(
+    admin_user: Dict[str, Any] = Depends(require_admin)
+):
+    """
+    List all users (admin only).
+    """
+    client = get_client()
+    result = client.table('user_profiles').select('*').execute()
+
+    return {
+        "users": result.data,
+        "total": len(result.data)
+    }
+
+
+@router.get("/admin/users/{user_id}")
+async def get_user(
+    user_id: str,
+    admin_user: Dict[str, Any] = Depends(require_admin)
+):
+    """
+    Get specific user details (admin only).
+    """
+    client = get_client()
+    result = client.table('user_profiles').select('*').eq('id', user_id).single().execute()
+
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    return {"user": result.data}
+
+
+@router.patch("/admin/users/{user_id}")
+async def update_user_admin(
+    user_id: str,
+    updates: dict,
+    admin_user: Dict[str, Any] = Depends(require_admin)
+):
+    """
+    Update user tier and budget (admin only).
+    """
+    client = get_client()
+
+    # Validate tier if provided
+    if 'tier' in updates:
+        valid_tiers = ['free', 'basic', 'pro', 'enterprise']
+        if updates['tier'] not in valid_tiers:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid tier. Must be one of: {', '.join(valid_tiers)}"
+            )
+
+    # Update user
+    result = client.table('user_profiles').update(updates).eq('id', user_id).execute()
+
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    return {
+        "message": "User updated successfully",
+        "user": result.data[0]
+    }
