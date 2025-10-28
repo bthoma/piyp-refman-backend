@@ -52,6 +52,7 @@ app.add_middleware(
     allow_origins=["*"] if settings.is_development else [
         "https://piyp.app",
         "https://www.piyp.app",
+        "https://piyp-refman-frontend-production.up.railway.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
