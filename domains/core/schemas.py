@@ -83,7 +83,9 @@ class UserResponse(BaseModel):
 class AuthResponse(BaseModel):
     """Schema for authentication response."""
     user: dict
-    session: dict
+    session: Optional[dict] = None
+    confirmation_required: Optional[bool] = False
+    message: Optional[str] = None
 
 
 class ProfileUpdateRequest(BaseModel):
