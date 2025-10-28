@@ -7,7 +7,7 @@ fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 
-# Database & ORM
+# Database & ORM (supabase 2.10.0 requires postgrest>=0.18)
 supabase==2.10.0
 postgrest==0.18.0
 
