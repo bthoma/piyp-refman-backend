@@ -8,8 +8,8 @@ uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 
 # Database & ORM
-supabase==2.3.0
-postgrest==0.13.0
+supabase==2.10.0
+postgrest==0.17.2
 
 # Authentication & Security
 pyjwt==2.8.0
@@ -23,7 +23,7 @@ pydantic-settings==2.1.0
 email-validator==2.1.0
 
 # HTTP Client
-httpx==0.24.1
+httpx==0.27.2
 aiohttp==3.9.1
 
 # PDF Processing (for RefMan)
