@@ -58,7 +58,7 @@ class SupabaseAuthService:
                 "is_admin": False
             }
 
-            profile_result = client.table('user_profiles').insert(profile_data).execute()
+            profile_result = client.schema('core').table('user_profiles').insert(profile_data).execute()
 
             if not profile_result.data:
                 raise HTTPException(
@@ -120,7 +120,7 @@ class SupabaseAuthService:
             user_id = auth_response.user.id
 
             # Get user profile
-            profile_result = client.table('user_profiles').select('*').eq('id', user_id).single().execute()
+            profile_result = client.schema('core').table('user_profiles').select('*').eq('id', user_id).single().execute()
 
             if not profile_result.data:
                 raise HTTPException(
@@ -130,7 +130,7 @@ class SupabaseAuthService:
 
             # Update last_login_at
             from datetime import datetime
-            client.table('user_profiles').update({
+            client.schema('core').table('user_profiles').update({
                 'last_login_at': datetime.utcnow().isoformat()
             }).eq('id', user_id).execute()
 
@@ -203,7 +203,7 @@ class SupabaseAuthService:
         """
         try:
             client = get_client()
-            result = client.table('user_profiles').select('*').eq('id', user_id).single().execute()
+            result = client.schema('core').table('user_profiles').select('*').eq('id', user_id).single().execute()
 
             if not result.data:
                 raise HTTPException(
