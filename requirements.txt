@@ -9,7 +9,7 @@ python-multipart==0.0.6
 
 # Database & ORM
 supabase==2.10.0
-postgrest==0.17.2
+postgrest==0.18.0
 
 # Authentication & Security
 pyjwt==2.8.0
