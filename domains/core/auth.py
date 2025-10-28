@@ -69,10 +69,16 @@ class SupabaseAuthService:
 
             # Check if session exists (email confirmation may be required)
             if not auth_response.session:
-                raise HTTPException(
-                    status_code=status.HTTP_202_ACCEPTED,
-                    detail="Signup successful! Please check your email to confirm your account before logging in."
-                )
+                return {
+                    "user": {
+                        "id": user_id,
+                        "email": email,
+                        "profile": profile_result.data[0]
+                    },
+                    "session": None,
+                    "confirmation_required": True,
+                    "message": "Signup successful! Please check your email to confirm your account before logging in."
+                }
 
             return {
                 "user": {
@@ -84,7 +90,8 @@ class SupabaseAuthService:
                     "access_token": auth_response.session.access_token,
                     "refresh_token": auth_response.session.refresh_token,
                     "expires_in": 3600
-                }
+                },
+                "confirmation_required": False
             }
 
         except HTTPException:
