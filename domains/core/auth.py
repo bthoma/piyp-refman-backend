@@ -67,6 +67,13 @@ class SupabaseAuthService:
                     detail="Failed to create user profile"
                 )
 
+            # Check if session exists (email confirmation may be required)
+            if not auth_response.session:
+                raise HTTPException(
+                    status_code=status.HTTP_202_ACCEPTED,
+                    detail="Signup successful! Please check your email to confirm your account before logging in."
+                )
+
             return {
                 "user": {
                     "id": user_id,
