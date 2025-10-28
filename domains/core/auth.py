@@ -30,10 +30,11 @@ class SupabaseAuthService:
             HTTPException: If signup fails
         """
         try:
-            client = get_client()
+            # Use service key for auth operations to bypass RLS
+            auth_client = get_client(use_service_key=True)
 
             # Sign up with Supabase Auth
-            auth_response = client.auth.sign_up({
+            auth_response = auth_client.auth.sign_up({
                 "email": email,
                 "password": password
             })
@@ -46,7 +47,7 @@ class SupabaseAuthService:
 
             user_id = auth_response.user.id
 
-            # Create profile in core.user_profiles
+            # Create profile in core.user_profiles (use service key to bypass RLS)
             profile_data = {
                 "id": user_id,
                 "email": email,
@@ -58,7 +59,7 @@ class SupabaseAuthService:
                 "is_admin": False
             }
 
-            profile_result = client.schema('core').table('user_profiles').insert(profile_data).execute()
+            profile_result = auth_client.schema('core').table('user_profiles').insert(profile_data).execute()
 
             if not profile_result.data:
                 raise HTTPException(
@@ -103,10 +104,11 @@ class SupabaseAuthService:
             HTTPException: If login fails
         """
         try:
-            client = get_client()
+            # Use service key for auth operations
+            auth_client = get_client(use_service_key=True)
 
             # Authenticate with Supabase Auth
-            auth_response = client.auth.sign_in_with_password({
+            auth_response = auth_client.auth.sign_in_with_password({
                 "email": email,
                 "password": password
             })
@@ -120,7 +122,7 @@ class SupabaseAuthService:
             user_id = auth_response.user.id
 
             # Get user profile
-            profile_result = client.schema('core').table('user_profiles').select('*').eq('id', user_id).single().execute()
+            profile_result = auth_client.schema('core').table('user_profiles').select('*').eq('id', user_id).single().execute()
 
             if not profile_result.data:
                 raise HTTPException(
@@ -130,7 +132,7 @@ class SupabaseAuthService:
 
             # Update last_login_at
             from datetime import datetime
-            client.schema('core').table('user_profiles').update({
+            auth_client.schema('core').table('user_profiles').update({
                 'last_login_at': datetime.utcnow().isoformat()
             }).eq('id', user_id).execute()
 
