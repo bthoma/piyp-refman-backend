@@ -135,8 +135,10 @@ class SupabaseAuthService:
 
             user_id = auth_response.user.id
 
-            # Get user profile
-            profile_result = auth_client.schema('core').table('user_profiles').select('*').eq('id', user_id).single().execute()
+            # Get user profile using a fresh service key client to bypass RLS
+            # (after sign_in, the auth_client has user session attached)
+            profile_client = get_client(use_service_key=True)
+            profile_result = profile_client.schema('core').table('user_profiles').select('*').eq('id', user_id).single().execute()
 
             if not profile_result.data:
                 raise HTTPException(
@@ -144,9 +146,9 @@ class SupabaseAuthService:
                     detail="User profile not found"
                 )
 
-            # Update last_login_at
+            # Update last_login_at using the profile client (bypasses RLS)
             from datetime import datetime
-            auth_client.schema('core').table('user_profiles').update({
+            profile_client.schema('core').table('user_profiles').update({
                 'last_login_at': datetime.utcnow().isoformat()
             }).eq('id', user_id).execute()
 
