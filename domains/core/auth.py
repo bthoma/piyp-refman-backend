@@ -220,7 +220,8 @@ class SupabaseAuthService:
             HTTPException: If user not found
         """
         try:
-            client = get_client()
+            # Use service key to bypass RLS
+            client = get_client(use_service_key=True)
             result = client.schema('core').table('user_profiles').select('*').eq('id', user_id).single().execute()
 
             if not result.data:
