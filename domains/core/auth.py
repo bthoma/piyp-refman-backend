@@ -59,7 +59,7 @@ class SupabaseAuthService:
                 "is_admin": False
             }
 
-            profile_result = auth_client.schema('core').table('user_profiles').insert(profile_data).execute()
+            profile_result = auth_client.postgrest.schema('core').from_('user_profiles').insert(profile_data).execute()
 
             if not profile_result.data:
                 raise HTTPException(
@@ -138,7 +138,7 @@ class SupabaseAuthService:
             # Get user profile using a fresh service key client to bypass RLS
             # (after sign_in, the auth_client has user session attached)
             profile_client = get_client(use_service_key=True)
-            profile_result = profile_client.schema('core').table('user_profiles').select('*').eq('id', user_id).single().execute()
+            profile_result = profile_client.postgrest.schema('core').from_('user_profiles').select('*').eq('id', user_id).single().execute()
 
             if not profile_result.data:
                 raise HTTPException(
@@ -148,7 +148,7 @@ class SupabaseAuthService:
 
             # Update last_login_at using the profile client (bypasses RLS)
             from datetime import datetime
-            profile_client.schema('core').table('user_profiles').update({
+            profile_client.postgrest.schema('core').from_('user_profiles').update({
                 'last_login_at': datetime.utcnow().isoformat()
             }).eq('id', user_id).execute()
 
@@ -226,7 +226,9 @@ class SupabaseAuthService:
         try:
             # Use service key to bypass RLS
             client = get_client(use_service_key=True)
-            result = client.schema('core').table('user_profiles').select('*').eq('id', user_id).single().execute()
+
+            # Set schema using postgrest client directly
+            result = client.postgrest.schema('core').from_('user_profiles').select('*').eq('id', user_id).single().execute()
 
             if not result.data:
                 raise HTTPException(
@@ -376,12 +378,12 @@ class SupabaseAuthService:
             profile_client = get_client(use_service_key=True)
 
             # Check if profile exists
-            existing_profile = profile_client.schema('core').table('user_profiles').select('*').eq('id', user_id).execute()
+            existing_profile = profile_client.postgrest.schema('core').from_('user_profiles').select('*').eq('id', user_id).execute()
 
             if existing_profile.data and len(existing_profile.data) > 0:
                 # Update existing profile
                 from datetime import datetime
-                profile_result = profile_client.schema('core').table('user_profiles').update({
+                profile_result = profile_client.postgrest.schema('core').from_('user_profiles').update({
                     'last_login_at': datetime.utcnow().isoformat(),
                     'auth_provider': 'google'
                 }).eq('id', user_id).execute()
@@ -402,7 +404,7 @@ class SupabaseAuthService:
                     "is_admin": False
                 }
 
-                profile_result = profile_client.schema('core').table('user_profiles').insert(profile_data).execute()
+                profile_result = profile_client.postgrest.schema('core').from_('user_profiles').insert(profile_data).execute()
 
                 if not profile_result.data:
                     raise HTTPException(
@@ -473,12 +475,12 @@ class SupabaseAuthService:
             profile_client = get_client(use_service_key=True)
 
             # Check if profile exists
-            existing_profile = profile_client.schema('core').table('user_profiles').select('*').eq('id', user_id).execute()
+            existing_profile = profile_client.postgrest.schema('core').from_('user_profiles').select('*').eq('id', user_id).execute()
 
             if existing_profile.data and len(existing_profile.data) > 0:
                 # Update existing profile
                 from datetime import datetime
-                profile_result = profile_client.schema('core').table('user_profiles').update({
+                profile_result = profile_client.postgrest.schema('core').from_('user_profiles').update({
                     'last_login_at': datetime.utcnow().isoformat(),
                     'auth_provider': 'google'
                 }).eq('id', user_id).execute()
@@ -499,7 +501,7 @@ class SupabaseAuthService:
                     "is_admin": False
                 }
 
-                profile_result = profile_client.schema('core').table('user_profiles').insert(profile_data).execute()
+                profile_result = profile_client.postgrest.schema('core').from_('user_profiles').insert(profile_data).execute()
 
                 if not profile_result.data:
                     raise HTTPException(
