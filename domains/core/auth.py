@@ -34,7 +34,7 @@ class SupabaseAuthService:
         """
         try:
             # Use service key for auth operations to bypass RLS
-            auth_client = get_client(use_service_key=True, schema='core')
+            auth_client = get_client(use_service_key=True)
 
             # Sign up with Supabase Auth
             auth_response = auth_client.auth.sign_up({
@@ -62,7 +62,7 @@ class SupabaseAuthService:
                 "is_admin": False
             }
 
-            profile_result = auth_client.table('user_profiles').insert(profile_data).execute()
+            profile_result = auth_client.from_('core.user_profiles').insert(profile_data).execute()
 
             if not profile_result.data:
                 raise HTTPException(
@@ -122,7 +122,7 @@ class SupabaseAuthService:
         """
         try:
             # Use service key for auth operations
-            auth_client = get_client(use_service_key=True, schema='core')
+            auth_client = get_client(use_service_key=True)
 
             # Authenticate with Supabase Auth
             auth_response = auth_client.auth.sign_in_with_password({
@@ -140,8 +140,8 @@ class SupabaseAuthService:
 
             # Get user profile using a fresh service key client to bypass RLS
             # (after sign_in, the auth_client has user session attached)
-            profile_client = get_client(use_service_key=True, schema='core')
-            profile_result = profile_client.table('user_profiles').select('*').eq('id', user_id).single().execute()
+            profile_client = get_client(use_service_key=True)
+            profile_result = profile_client.from_('core.user_profiles').select('*').eq('id', user_id).single().execute()
 
             if not profile_result.data:
                 raise HTTPException(
@@ -151,7 +151,7 @@ class SupabaseAuthService:
 
             # Update last_login_at using the profile client (bypasses RLS)
             from datetime import datetime
-            profile_client.table('user_profiles').update({
+            profile_client.from_('core.user_profiles').update({
                 'last_login_at': datetime.utcnow().isoformat()
             }).eq('id', user_id).execute()
 
@@ -240,9 +240,9 @@ class SupabaseAuthService:
             logger.info(f"Fetching user profile for user_id: {user_id}")
 
             # Use service key with core schema to bypass RLS
-            client = get_client(use_service_key=True, schema='core')
+            client = get_client(use_service_key=True)
             logger.info("Executing query on user_profiles table...")
-            result = client.table('user_profiles').select('*').eq('id', user_id).single().execute()
+            result = client.from_('core.user_profiles').select('*').eq('id', user_id).single().execute()
 
             logger.info(f"Query result: data={result.data is not None}, count={result.count if hasattr(result, 'count') else 'N/A'}")
 
@@ -378,7 +378,7 @@ class SupabaseAuthService:
         """
         try:
             # Use service key client to exchange code
-            auth_client = get_client(use_service_key=True, schema='core')
+            auth_client = get_client(use_service_key=True)
 
             # Exchange code for session
             session_response = auth_client.auth.exchange_code_for_session({
@@ -396,15 +396,15 @@ class SupabaseAuthService:
             email = user.email
 
             # Get or create user profile using fresh service key client
-            profile_client = get_client(use_service_key=True, schema='core')
+            profile_client = get_client(use_service_key=True)
 
             # Check if profile exists
-            existing_profile = profile_client.table('user_profiles').select('*').eq('id', user_id).execute()
+            existing_profile = profile_client.from_('core.user_profiles').select('*').eq('id', user_id).execute()
 
             if existing_profile.data and len(existing_profile.data) > 0:
                 # Update existing profile
                 from datetime import datetime
-                profile_result = profile_client.table('user_profiles').update({
+                profile_result = profile_client.from_('core.user_profiles').update({
                     'last_login_at': datetime.utcnow().isoformat(),
                     'auth_provider': 'google'
                 }).eq('id', user_id).execute()
@@ -425,7 +425,7 @@ class SupabaseAuthService:
                     "is_admin": False
                 }
 
-                profile_result = profile_client.table('user_profiles').insert(profile_data).execute()
+                profile_result = profile_client.from_('core.user_profiles').insert(profile_data).execute()
 
                 if not profile_result.data:
                     raise HTTPException(
@@ -474,7 +474,7 @@ class SupabaseAuthService:
         """
         try:
             # Use service key client to set session and get user
-            auth_client = get_client(use_service_key=True, schema='core')
+            auth_client = get_client(use_service_key=True)
 
             # Set the session with the tokens
             session_response = auth_client.auth.set_session(
@@ -493,15 +493,15 @@ class SupabaseAuthService:
             email = user.email
 
             # Get or create user profile using fresh service key client
-            profile_client = get_client(use_service_key=True, schema='core')
+            profile_client = get_client(use_service_key=True)
 
             # Check if profile exists
-            existing_profile = profile_client.table('user_profiles').select('*').eq('id', user_id).execute()
+            existing_profile = profile_client.from_('core.user_profiles').select('*').eq('id', user_id).execute()
 
             if existing_profile.data and len(existing_profile.data) > 0:
                 # Update existing profile
                 from datetime import datetime
-                profile_result = profile_client.table('user_profiles').update({
+                profile_result = profile_client.from_('core.user_profiles').update({
                     'last_login_at': datetime.utcnow().isoformat(),
                     'auth_provider': 'google'
                 }).eq('id', user_id).execute()
@@ -522,7 +522,7 @@ class SupabaseAuthService:
                     "is_admin": False
                 }
 
-                profile_result = profile_client.table('user_profiles').insert(profile_data).execute()
+                profile_result = profile_client.from_('core.user_profiles').insert(profile_data).execute()
 
                 if not profile_result.data:
                     raise HTTPException(
