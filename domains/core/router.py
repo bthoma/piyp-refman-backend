@@ -23,7 +23,8 @@ from .auth import (
     refresh_access_token,
     logout_user,
     initiate_google_oauth,
-    handle_oauth_callback
+    handle_oauth_callback,
+    exchange_oauth_code
 )
 from .middleware import get_current_user_id, get_current_user, require_admin
 
@@ -89,19 +90,33 @@ async def google_auth(request: Request):
 
 
 @router.get("/auth/callback", response_model=AuthResponse)
-async def auth_callback(
-    access_token: str,
-    refresh_token: str
-):
+async def auth_callback(code: str = None, access_token: str = None, refresh_token: str = None):
     """
     Handle OAuth callback from Supabase.
-    Creates or updates user profile and returns session tokens.
+    Supports both authorization code flow and implicit flow.
 
-    This endpoint is called by the frontend after it receives the tokens
-    from Supabase's OAuth redirect.
+    For authorization code flow:
+      - Receives 'code' parameter
+      - Exchanges code for tokens
+      - Creates/updates user profile
+
+    For implicit flow (deprecated, for backward compatibility):
+      - Receives 'access_token' and 'refresh_token' parameters
+      - Creates/updates user profile directly
     """
-    result = handle_oauth_callback(access_token, refresh_token)
-    return result
+    if code:
+        # Authorization code flow (preferred)
+        result = exchange_oauth_code(code)
+        return result
+    elif access_token and refresh_token:
+        # Implicit flow (deprecated)
+        result = handle_oauth_callback(access_token, refresh_token)
+        return result
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing required parameters: either 'code' or both 'access_token' and 'refresh_token'"
+        )
 
 
 @router.get("/me")
