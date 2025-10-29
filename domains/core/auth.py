@@ -299,6 +299,138 @@ class SupabaseAuthService:
                 detail="Logout failed"
             )
 
+    @staticmethod
+    def initiate_google_auth(redirect_url: str) -> Dict[str, str]:
+        """
+        Initiate Google OAuth flow.
+
+        Args:
+            redirect_url: Frontend callback URL to redirect after OAuth
+
+        Returns:
+            Dict containing OAuth URL to redirect user to
+
+        Raises:
+            HTTPException: If OAuth initiation fails
+        """
+        try:
+            client = get_client(use_service_key=True)
+
+            # Generate OAuth URL
+            auth_response = client.auth.sign_in_with_oauth({
+                "provider": "google",
+                "options": {
+                    "redirect_to": redirect_url
+                }
+            })
+
+            return {
+                "url": auth_response.url
+            }
+
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to initiate Google OAuth: {str(e)}"
+            )
+
+    @staticmethod
+    def handle_oauth_callback(access_token: str, refresh_token: str) -> Dict[str, Any]:
+        """
+        Handle OAuth callback and create/update user profile.
+
+        Args:
+            access_token: OAuth access token from callback
+            refresh_token: OAuth refresh token from callback
+
+        Returns:
+            Dict containing user data and tokens
+
+        Raises:
+            HTTPException: If callback handling fails
+        """
+        try:
+            # Use service key client to set session and get user
+            auth_client = get_client(use_service_key=True)
+
+            # Set the session with the tokens
+            session_response = auth_client.auth.set_session(
+                access_token=access_token,
+                refresh_token=refresh_token
+            )
+
+            if not session_response.user:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Failed to get user from OAuth tokens"
+                )
+
+            user = session_response.user
+            user_id = user.id
+            email = user.email
+
+            # Get or create user profile using fresh service key client
+            profile_client = get_client(use_service_key=True)
+
+            # Check if profile exists
+            existing_profile = profile_client.schema('core').table('user_profiles').select('*').eq('id', user_id).execute()
+
+            if existing_profile.data and len(existing_profile.data) > 0:
+                # Update existing profile
+                from datetime import datetime
+                profile_result = profile_client.schema('core').table('user_profiles').update({
+                    'last_login_at': datetime.utcnow().isoformat(),
+                    'auth_provider': 'google'
+                }).eq('id', user_id).execute()
+
+                profile_data = profile_result.data[0]
+            else:
+                # Create new profile for OAuth user
+                full_name = user.user_metadata.get('full_name') or user.user_metadata.get('name') or ''
+
+                profile_data = {
+                    "id": user_id,
+                    "email": email,
+                    "full_name": full_name,
+                    "auth_provider": "google",
+                    "tier": "free",
+                    "monthly_budget_usd": 10.00,
+                    "current_month_spent_usd": 0.00,
+                    "is_admin": False
+                }
+
+                profile_result = profile_client.schema('core').table('user_profiles').insert(profile_data).execute()
+
+                if not profile_result.data:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Failed to create user profile"
+                    )
+
+                profile_data = profile_result.data[0]
+
+            return {
+                "user": {
+                    "id": user_id,
+                    "email": email,
+                    "profile": profile_data
+                },
+                "session": {
+                    "access_token": session_response.session.access_token,
+                    "refresh_token": session_response.session.refresh_token,
+                    "expires_in": 3600
+                },
+                "confirmation_required": False
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"OAuth callback failed: {str(e)}"
+            )
+
 
 # Convenience functions
 def signup_user(email: str, password: str, full_name: str):
@@ -329,3 +461,13 @@ def refresh_access_token(refresh_token: str):
 def logout_user():
     """Convenience function for logout."""
     return SupabaseAuthService.logout()
+
+
+def initiate_google_oauth(redirect_url: str):
+    """Convenience function to initiate Google OAuth."""
+    return SupabaseAuthService.initiate_google_auth(redirect_url)
+
+
+def handle_oauth_callback(access_token: str, refresh_token: str):
+    """Convenience function to handle OAuth callback."""
+    return SupabaseAuthService.handle_oauth_callback(access_token, refresh_token)

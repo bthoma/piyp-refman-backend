@@ -3,7 +3,8 @@ Core Domain Router - Authentication and User Management
 Uses Supabase Auth for authentication.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import RedirectResponse
 from typing import Dict, Any
 
 from config.database import get_client
@@ -20,7 +21,9 @@ from .auth import (
     signup_user,
     login_user,
     refresh_access_token,
-    logout_user
+    logout_user,
+    initiate_google_oauth,
+    handle_oauth_callback
 )
 from .middleware import get_current_user_id, get_current_user, require_admin
 
@@ -69,6 +72,36 @@ async def logout(user_id: str = Depends(get_current_user_id)):
     Logout current user (invalidate session).
     """
     return logout_user()
+
+
+@router.get("/google")
+async def google_auth(request: Request):
+    """
+    Initiate Google OAuth flow.
+    Redirects user to Google's OAuth consent screen.
+    """
+    # Get the frontend base URL from the request origin or use a default
+    origin = request.headers.get("origin", "https://piyp-refman-frontend-production.up.railway.app")
+    redirect_url = f"{origin}/auth/callback"
+
+    result = initiate_google_oauth(redirect_url)
+    return RedirectResponse(url=result["url"])
+
+
+@router.get("/auth/callback", response_model=AuthResponse)
+async def auth_callback(
+    access_token: str,
+    refresh_token: str
+):
+    """
+    Handle OAuth callback from Supabase.
+    Creates or updates user profile and returns session tokens.
+
+    This endpoint is called by the frontend after it receives the tokens
+    from Supabase's OAuth redirect.
+    """
+    result = handle_oauth_callback(access_token, refresh_token)
+    return result
 
 
 @router.get("/me")
