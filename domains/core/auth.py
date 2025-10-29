@@ -188,7 +188,8 @@ class SupabaseAuthService:
             HTTPException: If token is invalid or expired
         """
         try:
-            client = get_client()
+            # Use service key for token verification to avoid RLS issues
+            client = get_client(use_service_key=True)
             user = client.auth.get_user(token)
 
             if not user or not user.user or not user.user.id:
@@ -199,10 +200,13 @@ class SupabaseAuthService:
 
             return user.user.id
 
+        except HTTPException:
+            raise
         except Exception as e:
+            # Include actual error for debugging
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token"
+                detail=f"Invalid or expired token: {str(e)}"
             )
 
     @staticmethod
