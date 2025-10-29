@@ -11,7 +11,7 @@ This module manages connections to a single Supabase database with multiple sche
 
 import os
 from typing import Optional
-from supabase import create_client, Client
+from supabase import create_client, Client, ClientOptions
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -59,14 +59,14 @@ class DatabaseConfig:
         """
         key = self.service_key if use_service_key else self.anon_key
 
-        # Create client with schema options
-        options = {
-            "schema": schema,
-            "headers": {
+        # Create client with schema options using ClientOptions
+        options = ClientOptions(
+            schema=schema,
+            headers={
                 "Accept-Profile": schema,
                 "Content-Profile": schema
             }
-        }
+        )
 
         return create_client(self.url, key, options=options)
 
