@@ -3,11 +3,14 @@ Authentication service using Supabase Auth.
 Handles signup, login, token verification, and OAuth.
 """
 
+import logging
 from typing import Optional, Dict, Any
 from fastapi import HTTPException, status
 from supabase import Client
 
 from config.database import get_client
+
+logger = logging.getLogger(__name__)
 
 
 class SupabaseAuthService:
@@ -188,22 +191,32 @@ class SupabaseAuthService:
             HTTPException: If token is invalid or expired
         """
         try:
+            logger.info(f"Verifying token (first 20 chars): {token[:20]}...")
+
             # Use service key for token verification to avoid RLS issues
             client = get_client(use_service_key=True)
+            logger.info("Getting user from token...")
             user = client.auth.get_user(token)
 
+            logger.info(f"User response: user={user is not None}, user.user={user.user if user else None}")
+
             if not user or not user.user or not user.user.id:
+                logger.error("Token verification failed: No user data returned from Supabase")
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid authentication token"
                 )
 
+            logger.info(f"Token verified successfully for user: {user.user.id}")
             return user.user.id
 
-        except HTTPException:
+        except HTTPException as he:
+            logger.error(f"HTTPException in verify_token: {he.status_code} - {he.detail}")
             raise
         except Exception as e:
             # Include actual error for debugging
+            logger.error(f"Token verification exception: {e.__class__.__name__}: {str(e)}")
+            logger.exception("Full token verification error:")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Invalid or expired token: {str(e)}"
@@ -224,21 +237,31 @@ class SupabaseAuthService:
             HTTPException: If user not found
         """
         try:
+            logger.info(f"Fetching user profile for user_id: {user_id}")
+
             # Use service key with core schema to bypass RLS
             client = get_client(use_service_key=True, schema='core')
+            logger.info("Executing query on user_profiles table...")
             result = client.table('user_profiles').select('*').eq('id', user_id).single().execute()
 
+            logger.info(f"Query result: data={result.data is not None}, count={result.count if hasattr(result, 'count') else 'N/A'}")
+
             if not result.data:
+                logger.error(f"User profile not found for user_id: {user_id}")
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="User profile not found"
                 )
 
+            logger.info(f"Successfully fetched profile for user: {user_id}")
             return result.data
 
-        except HTTPException:
+        except HTTPException as he:
+            logger.error(f"HTTPException in get_user_profile: {he.status_code} - {he.detail}")
             raise
         except Exception as e:
+            logger.error(f"Failed to fetch user profile: {e.__class__.__name__}: {str(e)}")
+            logger.exception("Full get_user_profile error:")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to fetch user profile: {str(e)}"

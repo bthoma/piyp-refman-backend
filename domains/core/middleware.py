@@ -2,12 +2,14 @@
 Authentication middleware for protected endpoints.
 """
 
+import logging
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Dict, Any
 
 from .auth import verify_token, get_user_profile
 
+logger = logging.getLogger(__name__)
 security = HTTPBearer()
 
 
@@ -24,8 +26,15 @@ async def get_current_user_id(
             # user_id is verified
             ...
     """
-    token = credentials.credentials
-    return verify_token(token)
+    try:
+        token = credentials.credentials
+        logger.info(f"Middleware: Extracting token (first 20 chars): {token[:20]}...")
+        user_id = verify_token(token)
+        logger.info(f"Middleware: Token verified, user_id: {user_id}")
+        return user_id
+    except Exception as e:
+        logger.error(f"Middleware: Token verification failed: {e.__class__.__name__}: {str(e)}")
+        raise
 
 
 async def get_current_user(
@@ -41,7 +50,14 @@ async def get_current_user(
             # user contains full profile
             ...
     """
-    return get_user_profile(user_id)
+    try:
+        logger.info(f"Middleware: Fetching user profile for user_id: {user_id}")
+        profile = get_user_profile(user_id)
+        logger.info(f"Middleware: Successfully fetched profile for user: {user_id}")
+        return profile
+    except Exception as e:
+        logger.error(f"Middleware: Failed to get user profile: {e.__class__.__name__}: {str(e)}")
+        raise
 
 
 async def require_admin(

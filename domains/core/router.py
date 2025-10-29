@@ -3,9 +3,12 @@ Core Domain Router - Authentication and User Management
 Uses Supabase Auth for authentication.
 """
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import RedirectResponse
 from typing import Dict, Any
+
+logger = logging.getLogger(__name__)
 
 from config.database import get_client
 from .schemas import (
@@ -125,7 +128,13 @@ async def get_current_user_profile(user: Dict[str, Any] = Depends(get_current_us
     Get current authenticated user's profile.
     Protected endpoint - requires valid JWT.
     """
-    return {"user": user}
+    try:
+        logger.info(f"GET /me endpoint called for user: {user.get('id', 'unknown')}")
+        return {"user": user}
+    except Exception as e:
+        logger.error(f"Error in GET /me endpoint: {e.__class__.__name__}: {str(e)}")
+        logger.exception("Full /me endpoint error:")
+        raise
 
 
 @router.patch("/profile")
