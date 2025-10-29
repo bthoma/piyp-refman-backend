@@ -45,19 +45,30 @@ class DatabaseConfig:
                 f"Please ensure .env file has your Supabase credentials."
             )
     
-    def get_client(self, use_service_key: bool = False) -> Client:
+    def get_client(self, use_service_key: bool = False, schema: str = 'public') -> Client:
         """
         Get Supabase client
-        
+
         Args:
-            use_service_key: If True, use service key (bypasses RLS). 
+            use_service_key: If True, use service key (bypasses RLS).
                            Use for admin operations only!
-        
+            schema: Database schema to use (default: 'public')
+
         Returns:
             Supabase client connected to the database
         """
         key = self.service_key if use_service_key else self.anon_key
-        return create_client(self.url, key)
+
+        # Create client with schema options
+        options = {
+            "schema": schema,
+            "headers": {
+                "Accept-Profile": schema,
+                "Content-Profile": schema
+            }
+        }
+
+        return create_client(self.url, key, options=options)
 
 
 # Global database config instance
@@ -65,20 +76,24 @@ db_config = DatabaseConfig()
 
 
 # Convenience functions for getting clients
-def get_client(use_service_key: bool = False) -> Client:
+def get_client(use_service_key: bool = False, schema: str = 'public') -> Client:
     """
     Get Supabase database client
-    
+
     Usage:
         # For user operations (respects RLS)
         client = get_client()
-        papers = client.table('refman.papers').select('*').execute()
-        
+        papers = client.table('papers').select('*').execute()
+
         # For admin operations (bypasses RLS)
         admin_client = get_client(use_service_key=True)
-        all_papers = admin_client.table('refman.papers').select('*').execute()
+        all_papers = admin_client.table('papers').select('*').execute()
+
+        # For core schema operations
+        core_client = get_client(use_service_key=True, schema='core')
+        profiles = core_client.table('user_profiles').select('*').execute()
     """
-    return db_config.get_client(use_service_key)
+    return db_config.get_client(use_service_key, schema)
 
 
 def get_admin_client() -> Client:

@@ -137,7 +137,7 @@ async def update_profile(
     Update user profile (non-protected fields only).
     Protected fields (tier, monthly_budget_usd, is_admin) require admin.
     """
-    client = get_client()
+    client = get_client(schema='core')
 
     # Build update dict (only include provided fields)
     update_data = updates.model_dump(exclude_none=True)
@@ -149,7 +149,7 @@ async def update_profile(
         )
 
     # Update profile
-    result = client.postgrest.schema('core').from_('user_profiles').update(update_data).eq('id', user_id).execute()
+    result = client.table('user_profiles').update(update_data).eq('id', user_id).execute()
 
     if not result.data:
         raise HTTPException(
@@ -168,8 +168,8 @@ async def list_users(
     """
     List all users (admin only).
     """
-    client = get_client()
-    result = client.postgrest.schema('core').from_('user_profiles').select('*').execute()
+    client = get_client(schema='core')
+    result = client.table('user_profiles').select('*').execute()
 
     return {
         "users": result.data,
@@ -185,8 +185,8 @@ async def get_user(
     """
     Get specific user details (admin only).
     """
-    client = get_client()
-    result = client.postgrest.schema('core').from_('user_profiles').select('*').eq('id', user_id).single().execute()
+    client = get_client(schema='core')
+    result = client.table('user_profiles').select('*').eq('id', user_id).single().execute()
 
     if not result.data:
         raise HTTPException(
@@ -206,7 +206,7 @@ async def update_user_admin(
     """
     Update user tier and budget (admin only).
     """
-    client = get_client()
+    client = get_client(schema='core')
 
     # Validate tier if provided
     if 'tier' in updates:
@@ -218,7 +218,7 @@ async def update_user_admin(
             )
 
     # Update user
-    result = client.postgrest.schema('core').from_('user_profiles').update(updates).eq('id', user_id).execute()
+    result = client.table('user_profiles').update(updates).eq('id', user_id).execute()
 
     if not result.data:
         raise HTTPException(
