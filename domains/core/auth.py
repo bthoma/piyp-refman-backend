@@ -376,16 +376,25 @@ class SupabaseAuthService:
         Raises:
             HTTPException: If code exchange fails
         """
+        logger.info("=" * 80)
+        logger.info("OAUTH: exchange_oauth_code() CALLED")
+        logger.info(f"OAUTH: Authorization code (first 20 chars): {code[:20]}...")
+        logger.info("=" * 80)
+
         try:
             # Use service key client to exchange code
+            logger.info("OAUTH: Creating service key client for code exchange...")
             auth_client = get_client(use_service_key=True)
 
             # Exchange code for session
+            logger.info("OAUTH: Exchanging authorization code for session...")
             session_response = auth_client.auth.exchange_code_for_session({
                 "auth_code": code
             })
+            logger.info(f"OAUTH: Code exchange response received. Session exists: {session_response.session is not None}, User exists: {session_response.user is not None}")
 
             if not session_response.session or not session_response.user:
+                logger.error("OAUTH: Code exchange failed - no session or user returned")
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Failed to exchange OAuth code for tokens"
@@ -394,25 +403,37 @@ class SupabaseAuthService:
             user = session_response.user
             user_id = user.id
             email = user.email
+            logger.info(f"OAUTH: Successfully exchanged code. User ID: {user_id}, Email: {email}")
+            logger.info(f"OAUTH: User metadata: {user.user_metadata}")
 
             # Get or create user profile using fresh service key client
+            logger.info("OAUTH: Creating fresh service key client for profile operations...")
             profile_client = get_client(use_service_key=True)
 
             # Check if profile exists
+            logger.info(f"OAUTH: Checking if profile exists for user_id: {user_id}")
             existing_profile = profile_client.postgrest.schema('core').from_('user_profiles').select('*').eq('id', user_id).execute()
+            logger.info(f"OAUTH: Profile check result - data exists: {existing_profile.data is not None}, count: {len(existing_profile.data) if existing_profile.data else 0}")
 
             if existing_profile.data and len(existing_profile.data) > 0:
                 # Update existing profile
+                logger.info("OAUTH: Profile exists, updating last_login_at and auth_provider...")
                 from datetime import datetime
-                profile_result = profile_client.postgrest.schema('core').from_('user_profiles').update({
+                update_data = {
                     'last_login_at': datetime.utcnow().isoformat(),
                     'auth_provider': 'google'
-                }).eq('id', user_id).execute()
+                }
+                logger.info(f"OAUTH: Update data: {update_data}")
+                profile_result = profile_client.postgrest.schema('core').from_('user_profiles').update(update_data).eq('id', user_id).execute()
+                logger.info(f"OAUTH: Profile update complete. Result data: {profile_result.data}")
 
                 profile_data = profile_result.data[0]
+                logger.info(f"OAUTH: Using existing profile for user: {user_id}")
             else:
                 # Create new profile for OAuth user
+                logger.info("OAUTH: No existing profile found, creating new profile...")
                 full_name = user.user_metadata.get('full_name') or user.user_metadata.get('name') or ''
+                logger.info(f"OAUTH: Extracted full_name from metadata: '{full_name}'")
 
                 profile_data = {
                     "id": user_id,
@@ -424,18 +445,24 @@ class SupabaseAuthService:
                     "current_month_spent_usd": 0.00,
                     "is_admin": False
                 }
+                logger.info(f"OAUTH: Profile data to insert: {profile_data}")
 
+                logger.info("OAUTH: Executing INSERT into core.user_profiles...")
                 profile_result = profile_client.postgrest.schema('core').from_('user_profiles').insert(profile_data).execute()
+                logger.info(f"OAUTH: INSERT result - data exists: {profile_result.data is not None}, data: {profile_result.data}")
 
                 if not profile_result.data:
+                    logger.error("OAUTH: Profile creation failed - INSERT returned no data")
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                         detail="Failed to create user profile"
                     )
 
                 profile_data = profile_result.data[0]
+                logger.info(f"OAUTH: Successfully created new profile for user: {user_id}")
 
-            return {
+            logger.info("OAUTH: Building response with user data and session tokens...")
+            response = {
                 "user": {
                     "id": user_id,
                     "email": email,
@@ -448,10 +475,17 @@ class SupabaseAuthService:
                 },
                 "confirmation_required": False
             }
+            logger.info("OAUTH: exchange_oauth_code() COMPLETED SUCCESSFULLY")
+            logger.info("=" * 80)
+            return response
 
-        except HTTPException:
+        except HTTPException as he:
+            logger.error(f"OAUTH: HTTPException in exchange_oauth_code: {he.status_code} - {he.detail}")
+            logger.exception("OAUTH: Full HTTPException traceback:")
             raise
         except Exception as e:
+            logger.error(f"OAUTH: Exception in exchange_oauth_code: {e.__class__.__name__}: {str(e)}")
+            logger.exception("OAUTH: Full exception traceback:")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"OAuth code exchange failed: {str(e)}"
@@ -472,17 +506,27 @@ class SupabaseAuthService:
         Raises:
             HTTPException: If callback handling fails
         """
+        logger.info("=" * 80)
+        logger.info("OAUTH: handle_oauth_callback() CALLED")
+        logger.info(f"OAUTH: Access token (first 20 chars): {access_token[:20]}...")
+        logger.info(f"OAUTH: Refresh token (first 20 chars): {refresh_token[:20]}...")
+        logger.info("=" * 80)
+
         try:
             # Use service key client to set session and get user
+            logger.info("OAUTH: Creating service key client for session setup...")
             auth_client = get_client(use_service_key=True)
 
             # Set the session with the tokens
+            logger.info("OAUTH: Setting session with provided tokens...")
             session_response = auth_client.auth.set_session(
                 access_token=access_token,
                 refresh_token=refresh_token
             )
+            logger.info(f"OAUTH: Session set. User exists: {session_response.user is not None}")
 
             if not session_response.user:
+                logger.error("OAUTH: Failed to get user from tokens")
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Failed to get user from OAuth tokens"
@@ -491,25 +535,37 @@ class SupabaseAuthService:
             user = session_response.user
             user_id = user.id
             email = user.email
+            logger.info(f"OAUTH: Successfully retrieved user from tokens. User ID: {user_id}, Email: {email}")
+            logger.info(f"OAUTH: User metadata: {user.user_metadata}")
 
             # Get or create user profile using fresh service key client
+            logger.info("OAUTH: Creating fresh service key client for profile operations...")
             profile_client = get_client(use_service_key=True)
 
             # Check if profile exists
+            logger.info(f"OAUTH: Checking if profile exists for user_id: {user_id}")
             existing_profile = profile_client.postgrest.schema('core').from_('user_profiles').select('*').eq('id', user_id).execute()
+            logger.info(f"OAUTH: Profile check result - data exists: {existing_profile.data is not None}, count: {len(existing_profile.data) if existing_profile.data else 0}")
 
             if existing_profile.data and len(existing_profile.data) > 0:
                 # Update existing profile
+                logger.info("OAUTH: Profile exists, updating last_login_at and auth_provider...")
                 from datetime import datetime
-                profile_result = profile_client.postgrest.schema('core').from_('user_profiles').update({
+                update_data = {
                     'last_login_at': datetime.utcnow().isoformat(),
                     'auth_provider': 'google'
-                }).eq('id', user_id).execute()
+                }
+                logger.info(f"OAUTH: Update data: {update_data}")
+                profile_result = profile_client.postgrest.schema('core').from_('user_profiles').update(update_data).eq('id', user_id).execute()
+                logger.info(f"OAUTH: Profile update complete. Result data: {profile_result.data}")
 
                 profile_data = profile_result.data[0]
+                logger.info(f"OAUTH: Using existing profile for user: {user_id}")
             else:
                 # Create new profile for OAuth user
+                logger.info("OAUTH: No existing profile found, creating new profile...")
                 full_name = user.user_metadata.get('full_name') or user.user_metadata.get('name') or ''
+                logger.info(f"OAUTH: Extracted full_name from metadata: '{full_name}'")
 
                 profile_data = {
                     "id": user_id,
@@ -521,18 +577,24 @@ class SupabaseAuthService:
                     "current_month_spent_usd": 0.00,
                     "is_admin": False
                 }
+                logger.info(f"OAUTH: Profile data to insert: {profile_data}")
 
+                logger.info("OAUTH: Executing INSERT into core.user_profiles...")
                 profile_result = profile_client.postgrest.schema('core').from_('user_profiles').insert(profile_data).execute()
+                logger.info(f"OAUTH: INSERT result - data exists: {profile_result.data is not None}, data: {profile_result.data}")
 
                 if not profile_result.data:
+                    logger.error("OAUTH: Profile creation failed - INSERT returned no data")
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                         detail="Failed to create user profile"
                     )
 
                 profile_data = profile_result.data[0]
+                logger.info(f"OAUTH: Successfully created new profile for user: {user_id}")
 
-            return {
+            logger.info("OAUTH: Building response with user data and session tokens...")
+            response = {
                 "user": {
                     "id": user_id,
                     "email": email,
@@ -545,10 +607,17 @@ class SupabaseAuthService:
                 },
                 "confirmation_required": False
             }
+            logger.info("OAUTH: handle_oauth_callback() COMPLETED SUCCESSFULLY")
+            logger.info("=" * 80)
+            return response
 
-        except HTTPException:
+        except HTTPException as he:
+            logger.error(f"OAUTH: HTTPException in handle_oauth_callback: {he.status_code} - {he.detail}")
+            logger.exception("OAUTH: Full HTTPException traceback:")
             raise
         except Exception as e:
+            logger.error(f"OAUTH: Exception in handle_oauth_callback: {e.__class__.__name__}: {str(e)}")
+            logger.exception("OAUTH: Full exception traceback:")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"OAuth callback failed: {str(e)}"

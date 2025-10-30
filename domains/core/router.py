@@ -107,15 +107,30 @@ async def auth_callback(code: str = None, access_token: str = None, refresh_toke
       - Receives 'access_token' and 'refresh_token' parameters
       - Creates/updates user profile directly
     """
+    logger.info("=" * 80)
+    logger.info("ROUTER: /auth/callback endpoint called")
+    logger.info(f"ROUTER: Parameters - code: {code is not None}, access_token: {access_token is not None}, refresh_token: {refresh_token is not None}")
+
     if code:
         # Authorization code flow (preferred)
+        logger.info("ROUTER: Using authorization code flow - calling exchange_oauth_code()")
+        logger.info(f"ROUTER: Code value (first 20 chars): {code[:20]}...")
         result = exchange_oauth_code(code)
+        logger.info("ROUTER: exchange_oauth_code() returned successfully")
+        logger.info("=" * 80)
         return result
     elif access_token and refresh_token:
         # Implicit flow (deprecated)
+        logger.info("ROUTER: Using implicit flow (token-based) - calling handle_oauth_callback()")
+        logger.info(f"ROUTER: Access token (first 20 chars): {access_token[:20]}...")
+        logger.info(f"ROUTER: Refresh token (first 20 chars): {refresh_token[:20]}...")
         result = handle_oauth_callback(access_token, refresh_token)
+        logger.info("ROUTER: handle_oauth_callback() returned successfully")
+        logger.info("=" * 80)
         return result
     else:
+        logger.error("ROUTER: Missing required OAuth callback parameters")
+        logger.info("=" * 80)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Missing required parameters: either 'code' or both 'access_token' and 'refresh_token'"
